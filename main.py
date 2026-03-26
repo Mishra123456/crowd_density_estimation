@@ -24,7 +24,8 @@ def main():
     # Initialize modules
     print("[INFO] Loading YOLOv4-tiny model for high accuracy detection...")
     try:
-        detector = PersonDetector(cfg_path, weights_path, names_path, confidence_threshold=0.4)
+        # Lowered confidence to 0.3 to catch partially occluded people in dense scenarios
+        detector = PersonDetector(cfg_path, weights_path, names_path, confidence_threshold=0.3)
     except FileNotFoundError as e:
         print(f"\n[ERROR] {e}\n")
         print("Please run: python models/download_models.py to download the YOLO weights.")

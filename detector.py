@@ -38,8 +38,8 @@ class PersonDetector:
         h, w = frame.shape[:2]
         
         # Preprocessing: Convert image to blob format required by YOLO
-        # 416x416 is the standard input size for YOLOv4-tiny balancing speed and accuracy
-        blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416, 416), swapRB=True, crop=False)
+        # Upgraded to 608x608 (from 416x416) to drastically improve accuracy on smaller/distant people
+        blob = cv2.dnn.blobFromImage(frame, 1/255.0, (608, 608), swapRB=True, crop=False)
         self.net.setInput(blob)
         
         # Forward pass through the network
