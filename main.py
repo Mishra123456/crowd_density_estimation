@@ -11,6 +11,7 @@ def main():
     parser = argparse.ArgumentParser(description="Real-Time Crowd Density Estimation")
     parser.add_argument("--source", type=str, default="0", help="Video source (0 for webcam, or path to video file)")
     parser.add_argument("--output-dir", type=str, default="outputs", help="Directory to save high density frames")
+    parser.add_argument("--roi", action="store_true", help="Draw a custom Region of Interest to monitor only a specific area")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -40,6 +41,16 @@ def main():
     if not cap.isOpened():
         print(f"[ERROR] Could not open video source {args.source}")
         return
+
+    selected_roi = None
+    if args.roi:
+        print("\n[INFO] Please select the Region of Interest (ROI) using your mouse.")
+        print("[INFO] Draw a rectangle and press ENTER or SPACE to confirm.")
+        ret, setup_frame = cap.read()
+        if ret:
+            setup_frame = cv2.resize(setup_frame, (800, 600))
+            selected_roi = cv2.selectROI("Select ROI (Press ENTER when done)", setup_frame, fromCenter=False, showCrosshair=True)
+            cv2.destroyWindow("Select ROI (Press ENTER when done)")
         
     print(f"[INFO] Starting video stream on source {args.source}...")
     print("[INFO] Press 'q' to quit.")
@@ -58,12 +69,32 @@ def main():
             
         frame = cv2.resize(frame, (800, 600))
         
-        boxes, confidences = detector.detect(frame)
+        raw_boxes, raw_confidences = detector.detect(frame)
+        
+        boxes = []
+        confidences = []
+        
+        # Filter bounding boxes if user drew a custom ROI
+        if selected_roi is not None and selected_roi[2] > 0 and selected_roi[3] > 0:
+            (rx, ry, rw, rh) = selected_roi
+            cv2.rectangle(frame, (rx, ry), (rx + rw, ry + rh), (255, 0, 0), 2)
+            cv2.putText(frame, "Active ROI", (rx, ry - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+            
+            for (box, conf) in zip(raw_boxes, raw_confidences):
+                cX = int((box[0] + box[2]) / 2.0)
+                cY = int((box[1] + box[3]) / 2.0)
+                if rx < cX < rx + rw and ry < cY < ry + rh:
+                    boxes.append(box)
+                    confidences.append(conf)
+        else:
+            boxes = raw_boxes
+            confidences = raw_confidences
+            
         person_count = len(boxes)
         
         # Update tracker
         objects = tracker.update(boxes)
-        # Calculate total unique people passed
+        # Calculate total unique people passed within monitored bounds
         total_unique = tracker.nextObjectID - 1
         
         density_label, density_color = get_density_class(person_count)
