@@ -1,0 +1,19 @@
+# Ignore python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore output evidence frames
+outputs/
+*.jpg
+*.png
+*.mp4
+sample_video.mp4
+
+# Ignore heavy neural network weight files
+models/*.caffemodel
+models/*.prototxt
+models/*.weights
+models/*.cfg
+models/*.names
