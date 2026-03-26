@@ -5,6 +5,7 @@ import argparse
 from detector import PersonDetector
 from heatmap import HeatmapGenerator
 from utils import get_density_class, draw_info, draw_boxes
+from tracker import CentroidTracker
 
 def main():
     parser = argparse.ArgumentParser(description="Real-Time Crowd Density Estimation")
@@ -12,16 +13,13 @@ def main():
     parser.add_argument("--output-dir", type=str, default="outputs", help="Directory to save high density frames")
     args = parser.parse_args()
 
-    # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Model paths (YOLOv4-tiny)
     current_dir = os.path.dirname(os.path.abspath(__file__))
     cfg_path = os.path.join(current_dir, "models", "yolov4-tiny.cfg")
     weights_path = os.path.join(current_dir, "models", "yolov4-tiny.weights")
     names_path = os.path.join(current_dir, "models", "coco.names")
     
-    # Initialize modules
     print("[INFO] Loading YOLOv4-tiny model for high accuracy detection...")
     try:
         # Lowered confidence to 0.3 to catch partially occluded people in dense scenarios
@@ -33,7 +31,9 @@ def main():
         
     heatmap_gen = HeatmapGenerator(blur_kernel=(81, 81))
     
-    # Initialize video stream
+    # Initialize the robust Centroid Tracker (Improvement 1)
+    tracker = CentroidTracker(maxDisappeared=30, maxDistance=100)
+    
     source = int(args.source) if args.source.isdigit() else args.source
     cap = cv2.VideoCapture(source)
     
@@ -44,12 +44,11 @@ def main():
     print(f"[INFO] Starting video stream on source {args.source}...")
     print("[INFO] Press 'q' to quit.")
     
-    # Variables for FPS and throttling saves
     fps_start_time = time.time()
     fps_frames = 0
     fps = 0
     last_save_time = 0
-    save_cooldown = 5.0 # seconds to wait before saving another alert frame
+    save_cooldown = 5.0
     
     while True:
         ret, frame = cap.read()
@@ -57,26 +56,25 @@ def main():
             print("[INFO] End of video stream.")
             break
             
-        # Resize frame for consistent processing and display
         frame = cv2.resize(frame, (800, 600))
         
-        # 1. Detection Module (YOLOv4-tiny)
         boxes, confidences = detector.detect(frame)
         person_count = len(boxes)
         
-        # 2. Density Classification Module
+        # Update tracker
+        objects = tracker.update(boxes)
+        # Calculate total unique people passed
+        total_unique = tracker.nextObjectID - 1
+        
         density_label, density_color = get_density_class(person_count)
         
-        # 3. Heatmap Module
         if person_count > 0:
             frame_display = heatmap_gen.generate(frame, boxes)
         else:
             frame_display = frame.copy()
             
-        # 4. Overlays
-        draw_boxes(frame_display, boxes, confidences, color=density_color)
+        draw_boxes(frame_display, boxes, confidences, objects=objects, color=density_color)
         
-        # Calculate real-time FPS
         fps_frames += 1
         elapsed_time = time.time() - fps_start_time
         if elapsed_time > 1.0:
@@ -84,12 +82,10 @@ def main():
             fps_start_time = time.time()
             fps_frames = 0
             
-        draw_info(frame_display, person_count, density_label, density_color, fps)
+        draw_info(frame_display, person_count, density_label, density_color, fps, total_unique)
         
-        # 5. Event Handling
         if density_label == "HIGH":
             current_time = time.time()
-            # Only save once every `save_cooldown` seconds to prevent spam
             if current_time - last_save_time > save_cooldown:
                 timestamp = time.strftime("%Y%m%d-%H%M%S")
                 save_path = os.path.join(args.output_dir, f"overcrowded_{timestamp}.jpg")
@@ -97,16 +93,13 @@ def main():
                 print(f"[ALERT] Overcrowding detected! Frame saved to {save_path}")
                 last_save_time = current_time
                 
-        # 6. Display Output
         cv2.imshow("Crowd Density Estimation & Heatmap", frame_display)
         
-        # Break loop on 'q'
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             print("[INFO] Quitting stream...")
             break
             
-    # Release resources
     cap.release()
     cv2.destroyAllWindows()
     print("[INFO] Successfully exited.")
