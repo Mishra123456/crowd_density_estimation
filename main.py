@@ -6,6 +6,8 @@ from detector import PersonDetector
 from heatmap import HeatmapGenerator
 from utils import get_density_class, draw_info, draw_boxes
 from tracker import CentroidTracker
+import datetime
+import matplotlib.pyplot as plt
 
 def main():
     parser = argparse.ArgumentParser(description="Real-Time Crowd Density Estimation")
@@ -61,6 +63,11 @@ def main():
     last_save_time = 0
     save_cooldown = 5.0
     
+    # Analytics history logs for ending graph
+    start_datetime = datetime.datetime.now()
+    history_time = []
+    history_count = []
+    
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -113,6 +120,10 @@ def main():
             fps_start_time = time.time()
             fps_frames = 0
             
+            # Log metrics every 1 second for the analytics graph
+            history_time.append((datetime.datetime.now() - start_datetime).total_seconds())
+            history_count.append(person_count)
+            
         draw_info(frame_display, person_count, density_label, density_color, fps, total_unique)
         
         if density_label == "HIGH":
@@ -133,7 +144,31 @@ def main():
             
     cap.release()
     cv2.destroyAllWindows()
-    print("[INFO] Successfully exited.")
+    print("[INFO] Successfully exited video stream.")
+    
+    # 7. Generate Data Analytics Graph upon exiting
+    if len(history_count) > 0:
+        print("[INFO] Generating Crowd Density Analytics Graph...")
+        plt.figure(figsize=(10, 5))
+        plt.plot(history_time, history_count, label="Live Crowd Count", color="blue", linewidth=2.5)
+        plt.fill_between(history_time, history_count, color="blue", alpha=0.2)
+        
+        # Draw analytical density boundary thresholds
+        plt.axhline(y=2.5, color='orange', linestyle='--', label="MEDIUM Density")
+        plt.axhline(y=5.5, color='red', linestyle='--', label="HIGH Density")
+        
+        plt.title('Real-Time Crowd Density Analytics')
+        plt.xlabel('Time (Seconds)')
+        plt.ylabel('Total People Detected')
+        plt.legend(loc="upper left")
+        plt.grid(True)
+        
+        graph_path = os.path.join(args.output_dir, "crowd_density_graph.png")
+        plt.savefig(graph_path)
+        print(f"[INFO] Analytical Graph successfully saved to {graph_path}")
+        
+        # Display the graph automatically
+        plt.show()
 
 if __name__ == "__main__":
     main()

@@ -32,7 +32,7 @@ crowd_density_estimation/
 1. **Navigate to the Project Directory**
 2. **Install Required Libraries:** Ensure Python 3 is installed.
    ```bash
-   pip install opencv-python numpy
+   pip install opencv-python numpy matplotlib
    ```
 3. **Download the Model Weights:**
    Run the model downloader script to reliably fetch the required YOLOv4-tiny files directly from the Darknet repos.
